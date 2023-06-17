@@ -121,6 +121,7 @@ long long button_change_delay = 300;
 int updated_title_id = 0;
 
 FastBot bot(BOT_TOKEN);
+String white_id_list [1] = {BOTS_CHAT_ID};
 
 // ------------------- ТИПЫ --------------------
 CRGB leds[NUM_LEDS];
@@ -152,7 +153,7 @@ struct {
   int time = 0;
 } alarm[7];
 
-const byte dawnOffsets[] = { 5, 10, 15, 20, 25, 30, 40, 50, 60, 1 };
+const byte dawnOffsets[] = { 1, 5, 10, 15, 20, 25, 30, 40, 50, 60};
 byte dawnMode;
 boolean dawnFlag = false;
 float thisTime;
@@ -317,19 +318,10 @@ int eeGetInt(int pos) {
 
 void newMsg(FB_msg& msg) {
   Serial.println(msg.toString());
-  // if ((msg.chatID == white_id_list[0]) || (msg.chatID == white_id_list[1]) || (msg.chatID == white_id_list[2])) {
-
-  if (msg.text == "Коммпьютерные сети") {
-    bot.sendMessage(" обемер ", msg.chatID);
-  } else if (msg.text == "Что это") {
-    bot.sendMessage(" boobies ", msg.chatID);
-  } else if (msg.text == "Alice_ask")
-    bot.sendMessage(" Алисер ", msg.chatID);
-
-  else if (msg.text == "Всё")
-    bot.sendMessage("Всё \n", msg.chatID);
-
-  else if (msg.text == "greetings") {
+  if (msg.chatID != white_id_list[0]) {
+    return;
+  }
+  if (msg.text == "greetings") {
     // for (int i = 0; i < 7; ++i) {
     //   Serial.println("alarm" + String(i) + " state: " + String(alarm[i].state) + ", time: " + String(alarm[i].time));
     // }
@@ -354,14 +346,61 @@ void newMsg(FB_msg& msg) {
     delay(1);
     sendSettings_flag = true;
   }
-  // else if (msg.text.startsWith("alarm_set")) {
-  //   String alarm_time = msg.text.substring(8);
-  //   Serial.println(alarm_time);
-  //   for (byte i = 0; i < 7; i++) {
-  //     Serial.print(alarm[i].state);
-  //     Serial.print(' ');
-  //     Serial.println(alarm[i].time);
-  //   }
+  else if (msg.text.startsWith("alarm_set_ON ", 0)) {
+    byte alarmNum = (char)msg.text[13] - '0';
+    int alarm_time = msg.text.substring(15).toInt();
+    if(alarmNum < 7){
+      alarm[alarmNum].state = 1;
+      alarm[alarmNum].time = alarm_time;
+      String answer = "lamp: alarm_set_OK " + String(alarmNum) + " " + String(alarm_time);
+      bot.sendMessage(answer, white_id_list[0]);
+    }
+    saveAlarm(alarmNum);
+    manualOff = false;
+  }
+  else if (msg.text.startsWith("alarm_set_OFF ", 0)) {
+    byte alarmNum = (char)msg.text[14] - '0';
+    if(alarmNum < 7){
+      alarm[alarmNum].state = 0;
+      String answer = "lamp: alarm_unset_OK " + String(alarmNum) + " " + String(alarm[alarmNum].time);
+      bot.sendMessage(answer, white_id_list[0]);
+    }
+    saveAlarm(alarmNum);
+    manualOff = false;
+  }
+  else if (msg.text == "alarmbot: alarms_get_all" || msg.text == "alice: alarms_get_all") {
+    String answer = "lamp: { \"alarms:\" [(";
+    for (byte i = 0; i < 6; i++) {
+      if(!alarm[i].state){
+        answer = answer + "off,0),(";
+      } else {
+        answer = answer + "on," + minutesToTimeString(alarm[i].time) + "),(";
+      }
+      Serial.printf("Alarm %d: %d %d\n", i, alarm[i].state, alarm[i].time);
+    }
+    if(!alarm[6].state){
+      answer = answer + "off,0)]}";
+    } else {
+      answer = answer + "on," + minutesToTimeString(alarm[6].time) + ")]}";
+    }
+    Serial.printf("Alarm %d: %d %d\n", 6, alarm[6].state, alarm[6].time);
+    bot.sendMessage(answer, white_id_list[0]);
+  }
+  else if (msg.text.startsWith("alarmbot: dawn_mode", 0)){
+    dawnMode = msg.text.substring(20).toInt();
+    saveDawnMmode();
+    String answer = "lamp: dawn_mode_set_OK " + String(dawnMode) + " " + String(dawnOffsets[dawnMode]);
+    bot.sendMessage(answer, white_id_list[0]);
+  }
+  else {
+    Serial.println(msg.text);
+  }
   // }
-  // }
+}
+
+String minutesToTimeString(int time){
+  byte hour = floor(time / 60);
+  byte minute = time - hour * 60;
+  String outputString = String(hour) + ":" + String(minute);
+  return outputString;
 }

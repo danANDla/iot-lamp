@@ -37,7 +37,7 @@ void timeTick() {
   }
   if (dawnFlag && timeStrTimer.isReady()) {
     fill_solid(leds, NUM_LEDS, dawnColor);
-    fillString(timeStr, CRGB::Black, false);
+    //fillString(timeStr, CRGB::Black, false);
     delay(1);
     ESP.wdtFeed();   // пнуть собаку
     yield();  // ещё раз пнуть собаку
