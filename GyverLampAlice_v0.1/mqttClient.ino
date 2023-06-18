@@ -93,10 +93,23 @@ void callback(char* topic, byte* payload, unsigned int length) {
       answer.toCharArray(buf, answer.length() + 1);
       client.publish(mqtt_topic_out, buf);
     }
-    else if (input_buffer.startsWith("alarmbot: dawn_mode", 0)){
-      dawnMode = input_buffer.substring(20).toInt();
+    else if (input_buffer.startsWith("dawn_mode_set", 0)){
+      dawnMode = input_buffer.substring(14).toInt();
       saveDawnMmode();
       String answer = "dawn_mode_set_OK " + String(dawnMode) + " " + String(dawnOffsets[dawnMode]);
+      Serial.printf("Publish message [%s]: ", mqtt_topic_out);
+      Serial.println(answer);
+      char buf[200];
+      answer.toCharArray(buf, answer.length() + 1);
+      client.publish(mqtt_topic_out, buf);
+    } 
+    else if (input_buffer.startsWith("dawn_mode_get", 0)){
+      String answer = "\{ \"dawn_mode\": " + String(dawnMode) + " \}";
+      Serial.printf("Publish message [%s]: ", mqtt_topic_out);
+      Serial.println(answer);
+      char buf[200];
+      answer.toCharArray(buf, answer.length() + 1);
+      client.publish(mqtt_topic_out, buf);
     } 
   }
 }

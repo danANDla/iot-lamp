@@ -17,6 +17,7 @@ class AlarmBotState(Enum):
     alarms_pick_edit = 3
     alarms_edit = 4
     alarms_toggle = 5
+    dawn_modes = 6
 
 
 class AlarmBot:
@@ -39,6 +40,9 @@ class AlarmBot:
         0,
         0
     ]
+
+    dawn_modes = [1, 5, 10, 15, 20, 25, 30, 40, 50, 60]
+    active_dawn_mode = 0
 
     alarm_buffer = ''
     picked = -1
@@ -71,6 +75,8 @@ class AlarmBot:
                 self.alarm_edit_handler(message)
             elif self.current_state == AlarmBotState.alarms_toggle:
                 self.pick_toggle_handler(message)
+            elif self.current_state == AlarmBotState.dawn_modes:
+                self.dawn_modes_handler(message)
             else:
                 print("unknown state")
 
@@ -82,9 +88,8 @@ class AlarmBot:
             self.alarm_list_menu(message)
 
         elif message.text == 'Настройки рассвета':
-            self.bot.send_message(message.from_user.id,
-                                  'Прочитать правила сайта вы можете по ' + '[ссылке](https://habr.com/ru/docs/help/rules/)',
-                                  parse_mode='Markdown')
+            self.current_state = AlarmBotState.dawn_modes
+            self.dawn_modes_menu(message)
         else:
             self.unknown_command_err_msg(message)
 
@@ -149,6 +154,17 @@ class AlarmBot:
                 self.current_state = AlarmBotState.alarms_list
                 self.alarm_list_menu(message)
 
+    def dawn_modes_handler(self, message):
+        if message.text == 'Назад':
+            self.current_state = AlarmBotState.root
+            self.root_menu(message)
+        elif not re.match("(1|5|10|15|20|25|30|40|50|60)", message.text):
+            self.unknown_command_err_msg(message)
+        else:
+            self.set_dawn_mode(self.dawn_modes.index(int(message.text)))
+            self.current_state = AlarmBotState.root
+            self.root_menu(message)
+
     def get_alarms(self):
         self.mqtt.get_alarms()
         while self.mqtt.state != MqttClientState.idle:
@@ -169,6 +185,19 @@ class AlarmBot:
             pass
         return 1
 
+    def get_dawn_mode(self):
+        self.mqtt.get_dawn_mode()
+        while self.mqtt.state != MqttClientState.idle:
+            pass
+        self.active_dawn_mode = self.mqtt.dawn_mode
+        return 1
+
+    def set_dawn_mode(self, mode):
+        self.mqtt.set_dawn_mode(mode)
+        while self.mqtt.state != MqttClientState.idle:
+            pass
+        return 1
+
     def unknown_command_err_msg(self, message):
         self.bot.send_message(message.from_user.id, 'неизвестная команда', parse_mode='Markdown')
 
@@ -183,7 +212,9 @@ class AlarmBot:
         self.get_alarms()
         on_ch = "✅ "
         off_ch = "❌ "
-        alarms_list = [(on_ch if self.alarms_states[i] else off_ch) + self.days[i] + " " + self.get_time_string_from_minutes(self.alarms[i]) for i in range(len(self.alarms))]
+        alarms_list = [
+            (on_ch if self.alarms_states[i] else off_ch) + self.days[i] + " " + self.get_time_string_from_minutes(
+                self.alarms[i]) for i in range(len(self.alarms))]
         breaker = '\n'
         answer = breaker.join(alarms_list)
         btn1 = types.KeyboardButton('Изменить будильник')
@@ -227,6 +258,18 @@ class AlarmBot:
         markup.add(*buttons)
         self.bot.send_message(message.from_user.id, answer, reply_markup=markup)
 
+    def dawn_modes_menu(self, message):
+        self.get_dawn_mode()
+        buttons = []
+        for idx, mode in enumerate(self.dawn_modes):
+            buttons.append(types.KeyboardButton(str(mode)))
+        answer = f'Текущая длительность рассвета {self.dawn_modes[self.active_dawn_mode]} мин\n\nВыбрать другую длительность (мин)'
+        button_back = types.KeyboardButton('Назад')
+        buttons.append(button_back)
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(*buttons)
+        self.bot.send_message(message.from_user.id, answer, reply_markup=markup)
+
     def get_day(self, message):
         day = re.match("(ПН|ВТ|СР|ЧТ|ПТ|СБ|ВС)(?= (\d{2}):(\d{2}))", message)
         if day.group(0):
@@ -251,20 +294,6 @@ class AlarmBot:
         if minutes < 10:
             minutes_str = "0" + minutes_str
         return hour_str + ":" + minutes_str
-
-    def create_confirm_handler(self, message):
-        if message.text == 'Да':
-            self.current_state = 'alarms_list'
-            self.alarms.append(self.alarm_buffer)
-            self.alarm_list_menu(message)
-        elif message.text == 'Нет':
-            self.current_state = 'alarms_create'
-            self.create_menu(message)
-        elif message.text == 'Назад':
-            self.current_state = 'alarms_list'
-            self.alarm_list_menu(message)
-        else:
-            self.unknown_command_err_msg(message)
 
 
 if __name__ == "__main__":

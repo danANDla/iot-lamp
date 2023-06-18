@@ -11,6 +11,8 @@ class MqttClientState(Enum):
     waiting_for_alarms = 2
     waiting_for_set = 3
     waiting_for_toggle = 4
+    waiting_for_dawn_modes = 5
+    waiting_for_dawn_mode_set = 6
 
 
 class MqttClient:
@@ -29,6 +31,7 @@ class MqttClient:
 
     alarms_states = []
     alarms_times = []
+    dawn_mode = 0
 
     def connect_mqtt(self) -> mqtt_client:
         def on_connect(client, userdata, flags, rc):
@@ -75,6 +78,12 @@ class MqttClient:
             elif self.state == MqttClientState.waiting_for_toggle:
                 if self.decode_alarm_toggle(msg.payload.decode()) != 0:
                     self.state = MqttClientState.idle
+            elif self.state == MqttClientState.waiting_for_dawn_modes:
+                if self.decode_dawn_mode_get(msg.payload.decode()) != 0:
+                    self.state = MqttClientState.idle
+            elif self.state == MqttClientState.waiting_for_dawn_mode_set:
+                if self.decode_dawn_mode_set(msg.payload.decode()) != 0:
+                    self.state = MqttClientState.idle
 
         self.client.subscribe(self.topicResponse)
         self.client.on_message = on_message
@@ -113,6 +122,18 @@ class MqttClient:
             return 1
         return 0
 
+    def decode_dawn_mode_get(self, msg: str):
+        if re.match("\{ \"dawn_mode\":.*", msg):
+            dawn_mode_packed = (msg.removeprefix("{ \"dawn_mode\": ")).removesuffix(" }")
+            self.dawn_mode = int(dawn_mode_packed)
+            return 1
+        return 0
+
+    def decode_dawn_mode_set(self, msg: str):
+        if re.match("dawn_mode_set_OK .*", msg):
+            return 1
+        return 0
+
     def get_alarms(self):
         self.state = MqttClientState.waiting_for_alarms
         self.publish(self.topicControl, 'alarms_get_all')
@@ -127,3 +148,11 @@ class MqttClient:
             self.publish(self.topicControl, 'alarm_set_OFF ' + str(day))
         else:
             self.publish(self.topicControl, 'alarm_set_ON ' + str(day) + ' ' + str(time))
+
+    def get_dawn_mode(self):
+        self.state = MqttClientState.waiting_for_dawn_modes
+        self.publish(self.topicControl, 'dawn_mode_get')
+
+    def set_dawn_mode(self, mode):
+        self.state = MqttClientState.waiting_for_dawn_mode_set
+        self.publish(self.topicControl, 'dawn_mode_set ' + str(mode))
