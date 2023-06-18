@@ -1,20 +1,46 @@
-import json
 import telebot
 from telebot import types
 from datetime import datetime
-from datetime import timedelta
 import re
 import props
+from enum import Enum
 
 token = props.token
+bots_chat_id = props.bots_chat_id
+
+
+class AlarmBotState(Enum):
+    root = 1
+    alarms_list = 2
+    alarms_pick_edit = 3
+    alarms_edit = 4
+    alarms_toggle = 5
+
 
 class AlarmBot:
-    current_state = ''
-    alarms = ['15.06.23 14:10', '15.06.23 15:05', '15.06.23 10:30']
+    current_state = AlarmBotState.root
+    alarms = [
+        600,
+        600,
+        600,
+        600,
+        600,
+        600,
+        600
+    ]
+    alarms_states = [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    ]
+
     alarm_buffer = ''
-    states = ['root',
-              'alarms_list', 'alarms_create', 'alarms_delete', 'delete_confirm', 'create_confirm'
-                                                                                 'dawn_settings']
+    picked = -1
+    days = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС']
     bot = None
 
     def __init__(self):
@@ -23,28 +49,99 @@ class AlarmBot:
 
         @self.bot.message_handler(commands=['start'])
         def start(message):
-            self.current_state = 'root'
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            btn1 = types.KeyboardButton("👋 Поздороваться")
-            markup.add(btn1)
-            self.bot.send_message(message.from_user.id, "👋 Привет! Я твой бот-помошник!", reply_markup=markup)
+            self.current_state = AlarmBotState.root
+            self.root_menu(message)
 
         @self.bot.message_handler(content_types=['text'])
         def get_text_messages(message):
-            if self.current_state == 'root':
+            if self.current_state == AlarmBotState.root:
                 self.root_handler(message)
-            elif self.current_state == 'alarms_list':
+            elif self.current_state == AlarmBotState.alarms_list:
                 self.alarm_list_handler(message)
-            elif self.current_state == 'alarms_delete':
-                self.alarms_delete_handler(message)
-            elif self.current_state == 'delete_confirm':
-                self.delete_confirm_handler(message)
-            elif self.current_state == 'alarms_create':
-                self.alarms_create_handler(message)
-            elif self.current_state == 'create_confirm':
-                self.create_confirm_handler(message)
+            elif self.current_state == AlarmBotState.alarms_pick_edit:
+                self.alarms_pick_edit_handler(message)
+            elif self.current_state == AlarmBotState.alarms_edit:
+                self.alarm_edit_handler(message)
+            elif self.current_state == AlarmBotState.alarms_toggle:
+                self.pick_toggle_handler(message)
+            else:
+                print("unknown state")
 
         self.bot.polling(none_stop=True, interval=0)
+
+    def root_handler(self, message):
+        if message.text == 'Будильники':
+            self.current_state = AlarmBotState.alarms_list
+            self.alarm_list_menu(message)
+
+        elif message.text == 'Настройки рассвета':
+            self.bot.send_message(message.from_user.id,
+                                  'Прочитать правила сайта вы можете по ' + '[ссылке](https://habr.com/ru/docs/help/rules/)',
+                                  parse_mode='Markdown')
+        else:
+            self.unknown_command_err_msg(message)
+
+    def alarm_list_handler(self, message):
+        if message.text == 'Изменить будильник':
+            self.current_state = AlarmBotState.alarms_pick_edit
+            self.pick_edit_menu(message)
+
+        elif message.text == 'Переключить будильник':
+            self.current_state = AlarmBotState.alarms_toggle
+            self.pick_toggle_menu(message)
+
+        elif message.text == 'Назад':
+            self.current_state = AlarmBotState.root
+            self.root_menu(message)
+
+        else:
+            self.unknown_command_err_msg(message)
+
+    def alarms_pick_edit_handler(self, message):
+        if message.text == 'Назад':
+            self.current_state = AlarmBotState.alarms_list
+            self.alarm_list_menu(message)
+        elif not re.match("(ПН|ВТ|СР|ЧТ|ПТ|СБ|ВС) (\d{2}):(\d{2})", message.text):
+            self.unknown_command_err_msg(message)
+        else:
+            res = self.get_day(message.text)
+            if res == -1:
+                self.unknown_command_err_msg(message)
+            else:
+                self.current_state = AlarmBotState.alarms_edit
+                self.picked = res
+                self.edit_menu(message)
+
+    def alarm_edit_handler(self, message):
+        if message.text == 'Назад':
+            self.current_state = AlarmBotState.alarms_pick_edit
+            self.alarm_list_menu(message)
+        elif not re.match("(\d{2}):(\d{2})", message.text):
+            self.unknown_command_err_msg(message)
+        else:
+            res = self.get_time_minutes(message.text)
+            if res == -1:
+                self.unknown_command_err_msg(message)
+            else:
+                self.alarms[self.picked] = res
+                self.current_state = AlarmBotState.alarms_list
+                self.alarms_states[self.picked] = 1
+                self.alarm_list_menu(message)
+
+    def pick_toggle_handler(self, message):
+        if message.text == 'Назад':
+            self.current_state = AlarmBotState.alarms_list
+            self.alarm_list_menu(message)
+        elif not re.match("(ПН|ВТ|СР|ЧТ|ПТ|СБ|ВС) (\d{2}):(\d{2})", message.text):
+            self.unknown_command_err_msg(message)
+        else:
+            res = self.get_day(message.text)
+            if res == -1:
+                self.unknown_command_err_msg(message)
+            else:
+                self.current_state = AlarmBotState.alarms_list
+                self.alarms_states[res] = self.alarms_states[res] ^ 1
+                self.alarm_list_menu(message)
 
     def get_alarms(self):
         return self.alarms
@@ -60,129 +157,76 @@ class AlarmBot:
         self.bot.send_message(message.from_user.id, 'Чего❓', reply_markup=markup)  # ответ бота
 
     def alarm_list_menu(self, message):
-        alarms_list = self.get_alarms()
+        alarms = self.get_alarms()
+        on_ch = "✅ "
+        off_ch = "❌ "
+        alarms_list = [(on_ch if self.alarms_states[i] else off_ch) + self.days[i] + " " + self.get_time_string_from_minutes(alarms[i]) for i in range(len(alarms))]
         breaker = '\n'
         answer = breaker.join(alarms_list)
-        btn1 = types.KeyboardButton('Добавить будильник')
-        btn2 = types.KeyboardButton('Удалить будильник')
+        btn1 = types.KeyboardButton('Изменить будильник')
+        btn2 = types.KeyboardButton('Переключить будильник')
         button_back = types.KeyboardButton('Назад')
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)  # создание новых кнопок
         markup.add(btn1, btn2, button_back)
         self.bot.send_message(message.from_user.id, answer, reply_markup=markup)
 
-    def delete_menu(self, message):
-        alarms_list = self.get_alarms()
+    def pick_edit_menu(self, message):
+        alarms = self.get_alarms()
+        alarms_list = [self.get_time_string_from_minutes(alarms[i]) for i in range(len(alarms))]
         buttons = []
         for idx, alarm in enumerate(alarms_list):
-            buttons.append(types.KeyboardButton(str(idx + 1) + ". " + str(alarm)))
-        answer = 'Выберите будильник, который необходимо удалить'
+            buttons.append(types.KeyboardButton(self.days[idx] + " " + alarm))
+        answer = 'Выберите будильник, который необходимо изменить'
         button_back = types.KeyboardButton('Назад')
         buttons.append(button_back)
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(*buttons)
         self.bot.send_message(message.from_user.id, answer, reply_markup=markup)
 
-    def create_menu(self, message):
-        msg = 'Введите дату и время в формате:\n- dd.mm.yy hh:mm\n- hh:mm на ближайший день'
+    def edit_menu(self, message):
+        msg = 'Введите время в формате hh:mm '
         button_back = types.KeyboardButton('Назад')
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(button_back)
         self.bot.send_message(message.from_user.id, msg, reply_markup=markup)
 
-    def root_handler(self, message):
-        if message.text == '👋 Поздороваться':
-            self.root_menu(message)
+    def pick_toggle_menu(self, message):
+        alarms = self.get_alarms()
+        alarms_list = [self.get_time_string_from_minutes(alarms[i]) for i in range(len(alarms))]
+        buttons = []
+        for idx, alarm in enumerate(alarms_list):
+            buttons.append(types.KeyboardButton(self.days[idx] + " " + alarm))
+        answer = 'Выберите будильник, который необходимо переключить'
+        button_back = types.KeyboardButton('Назад')
+        buttons.append(button_back)
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(*buttons)
+        self.bot.send_message(message.from_user.id, answer, reply_markup=markup)
 
-        elif message.text == 'Будильники':
-            self.current_state = 'alarms_list'
-            self.alarm_list_menu(message)
+    def get_day(self, message):
+        day = re.match("(ПН|ВТ|СР|ЧТ|ПТ|СБ|ВС)(?= (\d{2}):(\d{2}))", message)
+        if day.group(0):
+            return self.days.index(day.group(0))
+        return -1
 
-        elif message.text == 'Настройки рассвета':
-            self.bot.send_message(message.from_user.id,
-                                  'Прочитать правила сайта вы можете по ' + '[ссылке](https://habr.com/ru/docs/help/rules/)',
-                                  parse_mode='Markdown')
+    def get_time_minutes(self, message):
+        try:
+            time = datetime.strptime(message, "%H:%M")
+            time_minutes_int = time.hour * 60 + time.minute
+            return time_minutes_int
+        except ValueError:
+            return -1
 
-        elif message.text == 'Выход':
-            self.bot.send_message(message.from_user.id,
-                                  'Подробно про советы по оформлению публикаций прочитать по ' + '[ссылке](https://habr.com/ru/docs/companies/design/)',
-                                  parse_mode='Markdown')
-        else:
-            self.unknown_command_err_msg(message)
-
-    def alarms_delete_handler(self, message):
-        if message.text == 'Назад':
-            self.current_state = 'alarms_list'
-            self.alarm_list_menu(message)
-        elif not re.match("\d*\. (\d{2})\.(\d{2})\.(\d{2}) (\d{2}):(\d{2})", message.text):
-            self.unknown_command_err_msg(message)
-        else:
-            self.current_state = 'delete_confirm'
-            alarm_id = int(str(message.text).split('.')[0]) - 1
-            btn1 = types.KeyboardButton('Да')
-            btn2 = types.KeyboardButton('Нет')
-            button_back = types.KeyboardButton('Назад')
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            markup.add(btn1, btn2, button_back)
-            self.alarm_buffer = self.get_alarms()[alarm_id]
-            self.bot.send_message(message.from_user.id, f'Будет удален будилльник \'{self.alarm_buffer}\'',
-                                  reply_markup=markup)
-
-    def delete_confirm_handler(self, message):
-        if message.text == 'Да':
-            self.current_state = 'alarms_list'
-            self.alarms.remove(self.alarm_buffer)
-            self.alarm_list_menu(message)
-        elif message.text == 'Нет':
-            self.current_state = 'alarms_delete'
-            self.delete_menu(message)
-        elif message.text == 'Назад':
-            self.current_state = 'alarms_list'
-            self.alarm_list_menu(message)
-        else:
-            self.unknown_command_err_msg(message)
-
-    def get_date_time_string(self, message):
-        if re.match("(\d{2})\.(\d{2})\.(\d{2}) (\d{2}):(\d{2})", message):
-            try:
-                date = datetime.strptime(message, "%d.%m.%y %H:%M")
-                if date < datetime.now():
-                    date = date + timedelta(days=1)
-                return date.strftime("%d.%m.%y %H:%M")
-            except ValueError:
-                return 'bad'
-        else:
-            try:
-                date = datetime.strptime(message, "%H:%M")
-                if date.time() < datetime.now().time():
-                    today = date.today()
-                    fdate = today.replace(hour=date.hour, minute=date.minute)
-                    fdate = fdate + timedelta(days=1)
-                    return fdate.strftime("%d.%m.%y %H:%M")
-                return date.strftime("%d.%m.%y %H:%M")
-            except ValueError:
-                return 'bad'
-
-    def alarms_create_handler(self, message):
-        if message.text == 'Назад':
-            self.current_state = 'alarms_list'
-            self.alarm_list_menu(message)
-        elif (not re.match("(\d{2})\.(\d{2})\.(\d{2}) (\d{2}):(\d{2})", message.text)) and (
-                not re.match("(\d{2}):(\d{2})", message.text)):
-            self.unknown_command_err_msg(message)
-        else:
-            self.alarm_buffer = self.get_date_time_string(message.text)
-            if self.alarm_buffer == 'bad':
-                self.unknown_command_err_msg(message)
-            else:
-                self.current_state = 'create_confirm'
-                btn1 = types.KeyboardButton('Да')
-                btn2 = types.KeyboardButton('Нет')
-                button_back = types.KeyboardButton('Назад')
-                markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-                markup.add(btn1, btn2, button_back)
-                self.bot.send_message(message.from_user.id,
-                                      f'Будет добавлен новый будилльник \'{self.alarm_buffer}\'',
-                                      reply_markup=markup)
+    def get_time_string_from_minutes(self, minutes):
+        hour = minutes // 60
+        minutes = minutes % 60
+        hour_str = str(hour)
+        minutes_str = str(minutes)
+        if hour < 10:
+            hour_str = "0" + hour_str
+        if minutes < 10:
+            minutes_str = "0" + minutes_str
+        return hour_str + ":" + minutes_str
 
     def create_confirm_handler(self, message):
         if message.text == 'Да':
@@ -198,22 +242,6 @@ class AlarmBot:
         else:
             self.unknown_command_err_msg(message)
 
-    def alarm_list_handler(self, message):
-        if message.text == 'Добавить будильник':
-            self.current_state = 'alarms_create'
-            self.create_menu(message)
 
-        elif message.text == 'Удалить будильник':
-            self.current_state = 'alarms_delete'
-            self.delete_menu(message)
-
-        elif message.text == 'Назад':
-            self.current_state = 'root'
-            self.root_menu(message)
-
-        else:
-            self.unknown_command_err_msg(message)
-
-
-if __name__ == '__main__':
-    app = AlarmBot()
+if __name__ == "__main__":
+    AlarmBot()
