@@ -49,15 +49,26 @@ void callback(char* topic, byte* payload, unsigned int length) {
         alarm[alarmNum].state = 1;
         alarm[alarmNum].time = alarm_time;
         String answer = "alarm_set_OK " + String(alarmNum) + " " + String(alarm_time);
+        Serial.printf("Publish message [%s]: ", mqtt_topic_out);
+        Serial.println(answer);
+        char buf[200];
+        answer.toCharArray(buf, answer.length() + 1);
+        client.publish(mqtt_topic_out, buf);
       }
       saveAlarm(alarmNum);
       manualOff = false;
+
     }
     else if (input_buffer.startsWith("alarm_set_OFF ", 0)) {
       byte alarmNum = (char)input_buffer[14] - '0';
       if(alarmNum < 7){
         alarm[alarmNum].state = 0;
         String answer = "alarm_unset_OK " + String(alarmNum) + " " + String(alarm[alarmNum].time);
+        Serial.printf("Publish message [%s]: ", mqtt_topic_out);
+        Serial.println(answer);
+        char buf[200];
+        answer.toCharArray(buf, answer.length() + 1);
+        client.publish(mqtt_topic_out, buf);
       }
       saveAlarm(alarmNum);
       manualOff = false;

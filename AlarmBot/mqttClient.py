@@ -9,6 +9,8 @@ from paho.mqtt import client as mqtt_client
 class MqttClientState(Enum):
     idle = 1
     waiting_for_alarms = 2
+    waiting_for_set = 3
+    waiting_for_toggle = 4
 
 
 class MqttClient:
@@ -62,8 +64,16 @@ class MqttClient:
 
         def on_message(client, userdata, msg):
             print(f"Received `{msg.payload.decode()}` from `{msg.topic}` topic")
-            if self.state == MqttClientState.waiting_for_alarms and msg.topic == 'lampBotControlResponse':
+            if msg.topic != 'lampBotControlResponse':
+                return
+            if self.state == MqttClientState.waiting_for_alarms:
                 if self.decode_alarms(msg.payload.decode()) != 0:
+                    self.state = MqttClientState.idle
+            elif self.state == MqttClientState.waiting_for_set:
+                if self.decode_alarm_set(msg.payload.decode()) != 0:
+                    self.state = MqttClientState.idle
+            elif self.state == MqttClientState.waiting_for_toggle:
+                if self.decode_alarm_toggle(msg.payload.decode()) != 0:
                     self.state = MqttClientState.idle
 
         self.client.subscribe(self.topicResponse)
@@ -91,6 +101,29 @@ class MqttClient:
         else:
             return 0
 
+    def decode_alarm_set(self, msg: str):
+        if re.match("alarm_set_OK .*", msg):
+            return 1
+        return 0
+
+    def decode_alarm_toggle(self, msg: str):
+        if re.match("alarm_unset_OK .*", msg):
+            return 1
+        elif re.match("alarm_set_OK .*", msg):
+            return 1
+        return 0
+
     def get_alarms(self):
         self.state = MqttClientState.waiting_for_alarms
         self.publish(self.topicControl, 'alarms_get_all')
+
+    def set_alarm(self, day, time):
+        self.state = MqttClientState.waiting_for_set
+        self.publish(self.topicControl, 'alarm_set_ON ' + str(day) + ' ' + str(time))
+
+    def toggle_alarm(self, day, time, state):
+        self.state = MqttClientState.waiting_for_toggle
+        if state:
+            self.publish(self.topicControl, 'alarm_set_OFF ' + str(day))
+        else:
+            self.publish(self.topicControl, 'alarm_set_ON ' + str(day) + ' ' + str(time))

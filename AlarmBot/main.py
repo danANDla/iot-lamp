@@ -130,9 +130,8 @@ class AlarmBot:
             if res == -1:
                 self.unknown_command_err_msg(message)
             else:
-                self.alarms[self.picked] = res
+                self.set_alarm(self.picked, res)
                 self.current_state = AlarmBotState.alarms_list
-                self.alarms_states[self.picked] = 1
                 self.alarm_list_menu(message)
 
     def pick_toggle_handler(self, message):
@@ -146,8 +145,8 @@ class AlarmBot:
             if res == -1:
                 self.unknown_command_err_msg(message)
             else:
+                self.toggle_alarm(res)
                 self.current_state = AlarmBotState.alarms_list
-                self.alarms_states[res] = self.alarms_states[res] ^ 1
                 self.alarm_list_menu(message)
 
     def get_alarms(self):
@@ -156,6 +155,18 @@ class AlarmBot:
             pass
         self.alarms = self.mqtt.alarms_times
         self.alarms_states = self.mqtt.alarms_states
+        return 1
+
+    def toggle_alarm(self, day):
+        self.mqtt.toggle_alarm(day, self.alarms[day], self.alarms_states[day])
+        while self.mqtt.state != MqttClientState.idle:
+            pass
+        return 1
+
+    def set_alarm(self, day, time):
+        self.mqtt.set_alarm(day, time)
+        while self.mqtt.state != MqttClientState.idle:
+            pass
         return 1
 
     def unknown_command_err_msg(self, message):
