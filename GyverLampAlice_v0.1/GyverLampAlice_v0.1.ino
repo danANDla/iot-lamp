@@ -104,12 +104,10 @@ byte IP_AP[] = { 192, 168, 4, 66 };  // статический IP точки д�
 #include <NTPClient.h>
 #include <GyverButton.h>
 #include "fonts.h"
-#include <FastBot.h>
+#include <PubSubClient.h>
 
-// -------- TELEGA ---------
-#include "properties.h" // define BOT_TOKEN
+#include "properties.h"
 
-void newMsg(FB_msg& msg);
 
 long long update_timer = 0;
 long long global_update_timer = 0;
@@ -118,10 +116,14 @@ long long update_delay = 1000;
 long long global_update_delay = 2000;
 long long button_change_delay = 300;
 
-int updated_title_id = 0;
 
-FastBot bot(BOT_TOKEN);
-String white_id_list [1] = {BOTS_CHAT_ID};
+// -------------------- MQTT --------------------
+WiFiClient espClient;
+PubSubClient client(espClient);
+String clientId = String(ESP.getChipId());
+int  delayMS = 30000;  // Задаержка в мс между публикацией сообщений
+long lastMsg = 0;      // Время публикации предыдущегосообщения  (мс) 
+int  value = 0;        // Переменная для формирования публикуемого сообщения
 
 // ------------------- ТИПЫ --------------------
 CRGB leds[NUM_LEDS];
@@ -280,11 +282,13 @@ void setup() {
     delay(500);
   }
   updTime();
-  bot.attach(newMsg);
+  
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback);
 }
 
 void loop() {
-  bot.tick();
+  mqttTick();
   parseUDP();
   effectsTick();
   eepromTick();

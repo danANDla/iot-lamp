@@ -5,6 +5,7 @@ import re
 import props
 from enum import Enum
 from mqttClient import MqttClient
+from mqttClient import MqttClientState
 
 token = props.token
 bots_chat_id = props.bots_chat_id
@@ -42,11 +43,16 @@ class AlarmBot:
     alarm_buffer = ''
     picked = -1
     days = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС']
+
     bot = None
+    mqtt = None
 
     def __init__(self):
         self.current_state = 'root'
         self.bot = telebot.TeleBot(token)
+
+        self.mqtt = MqttClient()
+        self.mqtt.init()
 
         @self.bot.message_handler(commands=['start'])
         def start(message):
@@ -145,7 +151,12 @@ class AlarmBot:
                 self.alarm_list_menu(message)
 
     def get_alarms(self):
-        return self.alarms
+        self.mqtt.get_alarms()
+        while self.mqtt.state != MqttClientState.idle:
+            pass
+        self.alarms = self.mqtt.alarms_times
+        self.alarms_states = self.mqtt.alarms_states
+        return 1
 
     def unknown_command_err_msg(self, message):
         self.bot.send_message(message.from_user.id, 'неизвестная команда', parse_mode='Markdown')
@@ -158,10 +169,10 @@ class AlarmBot:
         self.bot.send_message(message.from_user.id, 'Чего❓', reply_markup=markup)  # ответ бота
 
     def alarm_list_menu(self, message):
-        alarms = self.get_alarms()
+        self.get_alarms()
         on_ch = "✅ "
         off_ch = "❌ "
-        alarms_list = [(on_ch if self.alarms_states[i] else off_ch) + self.days[i] + " " + self.get_time_string_from_minutes(alarms[i]) for i in range(len(alarms))]
+        alarms_list = [(on_ch if self.alarms_states[i] else off_ch) + self.days[i] + " " + self.get_time_string_from_minutes(self.alarms[i]) for i in range(len(self.alarms))]
         breaker = '\n'
         answer = breaker.join(alarms_list)
         btn1 = types.KeyboardButton('Изменить будильник')
@@ -172,8 +183,8 @@ class AlarmBot:
         self.bot.send_message(message.from_user.id, answer, reply_markup=markup)
 
     def pick_edit_menu(self, message):
-        alarms = self.get_alarms()
-        alarms_list = [self.get_time_string_from_minutes(alarms[i]) for i in range(len(alarms))]
+        self.get_alarms()
+        alarms_list = [self.get_time_string_from_minutes(self.alarms[i]) for i in range(len(self.alarms))]
         buttons = []
         for idx, alarm in enumerate(alarms_list):
             buttons.append(types.KeyboardButton(self.days[idx] + " " + alarm))
@@ -192,8 +203,9 @@ class AlarmBot:
         self.bot.send_message(message.from_user.id, msg, reply_markup=markup)
 
     def pick_toggle_menu(self, message):
-        alarms = self.get_alarms()
-        alarms_list = [self.get_time_string_from_minutes(alarms[i]) for i in range(len(alarms))]
+        self.get_alarms()
+
+        alarms_list = [self.get_time_string_from_minutes(self.alarms[i]) for i in range(len(self.alarms))]
         buttons = []
         for idx, alarm in enumerate(alarms_list):
             buttons.append(types.KeyboardButton(self.days[idx] + " " + alarm))
@@ -245,5 +257,4 @@ class AlarmBot:
 
 
 if __name__ == "__main__":
-    mqtt = MqttClient()
-    mqtt.run()
+    AlarmBot()
