@@ -4,6 +4,7 @@ from datetime import datetime
 import re
 import props
 from enum import Enum
+from mqttClient import MqttClient
 
 token = props.token
 bots_chat_id = props.bots_chat_id
@@ -244,4 +245,5 @@ class AlarmBot:
 
 
 if __name__ == "__main__":
-    AlarmBot()
+    mqtt = MqttClient()
+    mqtt.run()
