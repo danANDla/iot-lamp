@@ -8,11 +8,13 @@ void reconnect() {
     Serial.print(F(" "));
     Serial.print(mqtt_pass);
     Serial.print(F(" "));
-    if (client.connect(clientId.c_str(), mqtt_login, mqtt_pass)) {  
+    if (client.connect(clientId.c_str(), mqtt_login, mqtt_pass,
+        mqtt_topic_availability, 0, true, "OFF")) {  
       Serial.println(F("connected"));
 
       // Публикация сообщения с идентификаторм клиента в топик, заданный значением 'mqtt_topic_status'
       client.publish(mqtt_topic_status, clientId.c_str());
+      client.publish(mqtt_topic_availability, "ON");
 
       // Подписка на сообщения в топике, заданном значением mqtt_topic_in
       client.subscribe(mqtt_topic_in);
@@ -57,7 +59,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
       }
       saveAlarm(alarmNum);
       manualOff = false;
-
     }
     else if (input_buffer.startsWith("alarm_set_OFF ", 0)) {
       byte alarmNum = (char)input_buffer[14] - '0';
@@ -77,7 +78,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
       String answer = "{ \"alarms:\" [(";
       for (byte i = 0; i < 6; i++) {
         if(!alarm[i].state){
-          answer = answer + "off,0),(";
+          answer = answer + "off," + minutesToTimeString(alarm[i].time) + "),(";
         } else {
           answer = answer + "on," + minutesToTimeString(alarm[i].time) + "),(";
         }
@@ -126,17 +127,18 @@ void mqttTick(){
   if (!client.connected()) reconnect();
   client.loop();
 
-  // // Публикация сообщения с заданной периодичностью
+  // Публикация сообщения с заданной периодичностью
   // long now = millis();
   // if (now - lastMsg > delayMS) {
   //   lastMsg = now;
-  //   ++value;
+  //   // ++value;
     
-  //   // Формирование сообщения и его публикация 
-  //   char msg[200];
-  //   snprintf (msg, sizeof(msg), "heartbeat #%ld", value);
-  //   Serial.print("Publish message: ");
-  //   Serial.println(msg);
-  //   client.publish(mqtt_topic_out, msg);
+  //   // // Формирование сообщения и его публикация 
+  //   // char msg[200];
+  //   // snprintf (msg, sizeof(msg), "heartbeat #%ld", value);
+  //   // Serial.print("Publish message: ");
+  //   // Serial.println(msg);
+  //   // client.publish(mqtt_topic_status, msg);
+  //   // client.publish(mqtt_topic_availability, "ON");
   // }
 }

@@ -46,7 +46,7 @@ void buttonTick() {
   if (ONflag && touch.hasClicks()) {
     if (touch.getClicks() == 5) {
       resetString();
-      while (!fillString("обэмэ", CRGB::Green, true)) {
+      while (!fillString(lampIP, CRGB::Green, true)) {
         delay(1);
         ESP.wdtFeed();   // пнуть собаку
         yield();  // ещё раз пнуть собаку
