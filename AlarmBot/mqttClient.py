@@ -20,6 +20,7 @@ class MqttClient:
     port = 1884
     topicControl = "lampBotControl"
     topicResponse = "lampBotControlResponse"
+    topicAvailability = "alarmBot/availability"
     # Generate a Client ID with the subscribe prefix.
     client_id = f'subscribe-{random.randint(0, 100)}'
 
@@ -37,12 +38,14 @@ class MqttClient:
         def on_connect(client, userdata, flags, rc):
             if rc == 0:
                 print("Connected to MQTT Broker!")
+                self.publish(self.topicAvailability, 'ON')
             else:
                 print("Failed to connect, return code %d\n", rc)
 
         client = mqtt_client.Client(self.client_id)
         client.username_pw_set(self.username, self.password)
         client.on_connect = on_connect
+        client.will_set(self.topicAvailability, "OFF", 0, True)
         client.connect(self.broker, self.port)
         return client
 

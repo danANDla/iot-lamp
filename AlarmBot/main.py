@@ -177,12 +177,18 @@ class AlarmBot:
         self.mqtt.toggle_alarm(day, self.alarms[day], self.alarms_states[day])
         while self.mqtt.state != MqttClientState.idle:
             pass
+
+        self.alarms_states[day] = self.alarms_states[day] ^ 1
+        self.bot.set_chat_title(-1001672365693, self.get_alarms_string(), )
         return 1
 
     def set_alarm(self, day, time):
         self.mqtt.set_alarm(day, time)
         while self.mqtt.state != MqttClientState.idle:
             pass
+        self.alarms[day] = time
+        self.alarms_states[day] = 1
+        self.bot.set_chat_title(-1001672365693, self.get_alarms_string(), )
         return 1
 
     def get_dawn_mode(self):
@@ -294,6 +300,19 @@ class AlarmBot:
         if minutes < 10:
             minutes_str = "0" + minutes_str
         return hour_str + ":" + minutes_str
+
+    def get_alarms_string(self):
+        answer = []
+        for idx, alarm in enumerate(self.alarms):
+            if self.alarms_states[idx]:
+                answer.append(str(alarm))
+            else:
+                if alarm == 0:
+                    answer.append(str(-1))
+                else:
+                    answer.append(str(-alarm))
+        breaker = ","
+        return breaker.join(answer)
 
 
 if __name__ == "__main__":
